@@ -19,7 +19,7 @@ steps:
     args:
       - '-c'
       - |
-        cd environments/$BRANCH_NAME
+        cd infrastructure/$BRANCH_NAME
         terraform init -upgrade
         terraform fmt -recursive -check -diff
         terraform validate
@@ -67,8 +67,11 @@ steps:
           --data policy/ \
           --explain=notes \
           --input $${ASSET}.json \
-          'authorized = data.terraform.analysis.authz; violations = data.terraform.analysis.violation'
+          'authorized = data.terraform.analysis.authz; violations = data.terraform.analysis.violation' \
+          || exit 0
 
   - id: 'IaC apply'
     name: 'hashicorp/terraform:latest'
-    args: ['apply']
+    args:
+      - apply
+      - -auto-approve
