@@ -1,0 +1,7 @@
+./terraform.tfstate
+./tfplan.binary
+./tfplan.json
+./.gitignore
+.terraform
+.terraform.lock.hcl
+.infracost/

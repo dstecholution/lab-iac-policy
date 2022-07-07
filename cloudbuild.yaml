@@ -1,0 +1,74 @@
+---
+options:
+  dynamic_substitutions: true
+availableSecrets:
+  secretManager: {}
+substitutions:
+  _SNYK_API_KEY: ''
+  _INFRACOST_API_KEY: 'nEJ1ZgVVK6XB7Obx0dnKPgEHVuBQMy0X'
+steps:
+
+  - id: 'IaC'
+    name: 'hashicorp/terraform:latest'
+    entrypoint: 'sh'
+    volumes:
+      - name: 'assets'
+        path: '/assets'
+    env:
+      - "ASSET=/assets/${BRANCH_NAME}_plan"
+    args:
+      - '-c'
+      - |
+        cd environments/$BRANCH_NAME
+        terraform init -upgrade
+        terraform fmt -recursive -check -diff
+        terraform validate
+        terraform plan
+        terraform show -json 2>&1 > $${ASSET}.json
+
+#  - id: 'Quality Check'
+#    name: 'snyk/snyk-cli:1.927.0-docker'
+#    env:
+#      - 'SNYK_TOKEN=${_SNYK_API_KEY}'
+#      - "ASSET=/assets/${BRANCH_NAME}_plan"
+#    volumes:
+#      - name: 'assets'
+#        path: '/assets'
+#    args:
+#      - 'iac'
+#      - 'test'
+#      - "$${ASSET}.json"
+
+  - id: 'Deployment costs'
+    name: 'infracost/infracost:ci-latest'
+    volumes:
+      - name: 'assets'
+        path: '/assets'
+    env:
+      - "ASSET=/assets/${BRANCH_NAME}_plan"
+      - "INFRACOST_API_KEY=${_INFRACOST_API_KEY}"
+      - "INFRACOST_SKIP_UPDATE_CHECK=false"
+    args:
+      - 'breakdown'
+      - '--path'
+      - "$${ASSET}.json"
+
+  - id: 'Policy check'
+    name: 'openpolicyagent/opa:latest'
+    volumes:
+      - name: 'assets'
+        path: '/assets'
+    env:
+      - "ASSET=/assets/${BRANCH_NAME}_plan"
+    args:
+      - |
+        opa eval \
+          --format pretty \
+          --data policy/ \
+          --explain=notes \
+          --input $${ASSET}.json \
+          'authorized = data.terraform.analysis.authz; violations = data.terraform.analysis.violation'
+
+  - id: 'IaC apply'
+    name: 'hashicorp/terraform:latest'
+    args: ['apply']
